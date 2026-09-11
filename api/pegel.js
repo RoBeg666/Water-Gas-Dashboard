@@ -2,9 +2,26 @@
 // Holt live alle Stationen der wichtigsten Flüsse von PEGELONLINE ab.
 // Direkter Browser-Zugriff auf pegelonline.wsv.de scheiterte an CORS -
 // server-zu-server-Aufrufe sind davon nicht betroffen.
+//
+// Wichtig: der aktuelle Messwert steckt bei PEGELONLINE verschachtelt in
+// einer "timeseries" (meist shortname "W" = Wasserstand). Ohne
+// includeTimeseries=true bleibt currentMeasurement leer, auch wenn
+// includeCurrentMeasurement=true gesetzt ist.
 
 const WATERS = ['RHEIN', 'DONAU', 'ELBE', 'MAIN', 'WESER'];
 const STATIONS_PER_WATER = 4;
+
+function extractLevel(station) {
+  if (!Array.isArray(station.timeseries)) return null;
+
+  const ts = station.timeseries.find(t => t.shortname === 'W') || station.timeseries[0];
+  if (!ts || !ts.currentMeasurement || typeof ts.currentMeasurement.value !== 'number') return null;
+
+  return {
+    level: ts.currentMeasurement.value,
+    trend: ts.currentMeasurement.trend ?? 0
+  };
+}
 
 export default async function handler(req, res) {
   const debug = [];
@@ -12,7 +29,7 @@ export default async function handler(req, res) {
   try {
     const results = await Promise.allSettled(
       WATERS.map(water =>
-        fetch(`https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=${water}&includeCurrentMeasurement=true`, {
+        fetch(`https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=${water}&includeTimeseries=true&includeCurrentMeasurement=true`, {
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WasserGasDashboard/1.0)' }
         })
           .then(r => {
@@ -38,7 +55,11 @@ export default async function handler(req, res) {
       const rawCount = (result.value.stations || []).length;
 
       const stations = (result.value.stations || [])
-        .filter(s => s.currentMeasurement && typeof s.currentMeasurement.value === 'number')
+        .map(s => {
+          const measurement = extractLevel(s);
+          return measurement ? { ...s, level: measurement.level, trend: measurement.trend } : null;
+        })
+        .filter(Boolean)
         .sort((a, b) => (b.km ?? 0) - (a.km ?? 0));
 
       debug.push({ water, rawCount, withMeasurement: stations.length });
@@ -54,8 +75,8 @@ export default async function handler(req, res) {
         pegel.push({
           water,
           name: s.longname || s.shortname,
-          level: s.currentMeasurement.value,
-          trend: s.currentMeasurement.trend ?? 0
+          level: s.level,
+          trend: s.trend
         });
       }
     });
