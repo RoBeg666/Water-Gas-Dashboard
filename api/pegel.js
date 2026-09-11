@@ -7,6 +7,8 @@ const WATERS = ['RHEIN', 'DONAU', 'ELBE', 'MAIN', 'WESER'];
 const STATIONS_PER_WATER = 4;
 
 export default async function handler(req, res) {
+  const debug = [];
+
   try {
     const results = await Promise.allSettled(
       WATERS.map(water =>
@@ -14,7 +16,7 @@ export default async function handler(req, res) {
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WasserGasDashboard/1.0)' }
         })
           .then(r => {
-            if (!r.ok) throw new Error(`${water}: Status ${r.status}`);
+            if (!r.ok) throw new Error(`Status ${r.status}`);
             return r.json();
           })
           .then(stations => ({ water, stations }))
@@ -29,12 +31,17 @@ export default async function handler(req, res) {
 
       if (result.status !== 'fulfilled') {
         failedWaters.push(water);
+        debug.push({ water, error: String(result.reason && result.reason.message || result.reason) });
         return;
       }
+
+      const rawCount = (result.value.stations || []).length;
 
       const stations = (result.value.stations || [])
         .filter(s => s.currentMeasurement && typeof s.currentMeasurement.value === 'number')
         .sort((a, b) => (b.km ?? 0) - (a.km ?? 0));
+
+      debug.push({ water, rawCount, withMeasurement: stations.length });
 
       if (stations.length === 0) {
         failedWaters.push(water);
@@ -57,13 +64,15 @@ export default async function handler(req, res) {
     res.status(200).json({
       pegel,
       failedWaters,
+      debug,
       abgerufenAm: new Date().toISOString()
     });
 
   } catch (error) {
     res.status(502).json({
       error: true,
-      message: error.message || 'Unbekannter Fehler beim Abruf der Pegel-Daten'
+      message: error.message || 'Unbekannter Fehler beim Abruf der Pegel-Daten',
+      debug
     });
   }
 }
