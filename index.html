@@ -573,12 +573,9 @@
         }
 
         // Pegel-Daten (21 Leitpegel)
-        // Statt fest einprogrammierter Stations-IDs (die sich als falsch herausstellten)
-        // fragen wir live pro Gewässer alle Stationen ab und zeigen, was Daten liefert.
-        // Das kann nie an falschen IDs scheitern, weil nichts geraten wird.
-        const WATERS = ['RHEIN', 'DONAU', 'ELBE', 'MAIN', 'WESER'];
-        const STATIONS_PER_WATER = 4;
-
+        // Läuft jetzt über die Vermittler-Funktion /api/pegel (server-seitig),
+        // da direkter Browser-Zugriff auf pegelonline.wsv.de an CORS scheiterte -
+        // konsistent mit dem Ansatz für Gas- und Wetter-Daten.
         let currentTab = 'pegel';
         let lastUpdateTime = null;
 
@@ -592,85 +589,50 @@
             pegelContent.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
 
             try {
-                const results = await Promise.allSettled(
-                    WATERS.map(water =>
-                        fetch(`https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=${water}&includeCurrentMeasurement=true`)
-                            .then(res => {
-                                if (!res.ok) throw new Error(`${water}: ${res.status}`);
-                                return res.json();
-                            })
-                            .then(stations => ({ water, stations }))
-                    )
-                );
+                const response = await fetch('/api/pegel');
+                const data = await response.json();
+
+                if (!response.ok || data.error) {
+                    throw new Error(data.message || 'Abruf fehlgeschlagen');
+                }
+
+                if (!data.pegel || data.pegel.length === 0) {
+                    throw new Error('keine Stationen geliefert');
+                }
 
                 let html = '<table><thead><tr><th>Gewässer</th><th>Pegel</th><th>Stand (cm)</th><th>Trend</th></tr></thead><tbody>';
-                let anyData = false;
-                const failedWaters = [];
 
-                results.forEach((result, idx) => {
-                    const water = WATERS[idx];
+                data.pegel.forEach(station => {
+                    const water = station.water;
+                    const levelStr = station.level.toFixed(0);
+                    const trend = station.trend;
+                    const trendText = trend > 0 ? '📈 steigt' : trend < 0 ? '📉 sinkt' : '➡️ stabil';
+                    const trendClass = trend > 0 ? 'trend-up' : trend < 0 ? 'trend-down' : 'trend-stable';
 
-                    if (result.status !== 'fulfilled') {
-                        failedWaters.push(water);
-                        return;
-                    }
-
-                    const stations = (result.value.stations || [])
-                        .filter(s => s.currentMeasurement && typeof s.currentMeasurement.value === 'number')
-                        .sort((a, b) => (b.km ?? 0) - (a.km ?? 0));
-
-                    if (stations.length === 0) {
-                        failedWaters.push(water);
-                        return;
-                    }
-
-                    // Gleichmäßig über den Flusslauf verteilte Stichprobe statt nur der ersten N
-                    const step = Math.max(1, Math.floor(stations.length / STATIONS_PER_WATER));
-                    const picked = [];
-                    for (let i = 0; i < stations.length && picked.length < STATIONS_PER_WATER; i += step) {
-                        picked.push(stations[i]);
-                    }
-
-                    picked.forEach(station => {
-                        anyData = true;
-                        const levelStr = station.currentMeasurement.value.toFixed(0);
-                        const trend = station.currentMeasurement.trend ?? 0;
-                        const trendText = trend > 0 ? '📈 steigt' : trend < 0 ? '📉 sinkt' : '➡️ stabil';
-                        const trendClass = trend > 0 ? 'trend-up' : trend < 0 ? 'trend-down' : 'trend-stable';
-
-                        html += `
-                            <tr>
-                                <td>${water.charAt(0) + water.slice(1).toLowerCase()}</td>
-                                <td><span class="pegel-name">${station.longname || station.shortname}</span></td>
-                                <td><span class="value-box">${levelStr}</span></td>
-                                <td><span class="trend ${trendClass}">${trendText}</span></td>
-                            </tr>
-                        `;
-                    });
+                    html += `
+                        <tr>
+                            <td>${water.charAt(0) + water.slice(1).toLowerCase()}</td>
+                            <td><span class="pegel-name">${station.name}</span></td>
+                            <td><span class="value-box">${levelStr}</span></td>
+                            <td><span class="trend ${trendClass}">${trendText}</span></td>
+                        </tr>
+                    `;
                 });
 
                 html += '</tbody></table>';
 
-                if (failedWaters.length > 0) {
-                    html = `<div class="error-message">⚠️ Keine Daten für: ${failedWaters.join(', ')}</div>` + html;
+                if (data.failedWaters && data.failedWaters.length > 0) {
+                    html = `<div class="error-message">⚠️ Keine Daten für: ${data.failedWaters.join(', ')}</div>` + html;
                 }
 
-                if (!anyData) {
-                    pegelContent.innerHTML = `
-                        <div class="error-message">
-                            ⚠️ Aktuell konnten keine Pegel-Daten geladen werden. Bitte Internetverbindung prüfen und erneut versuchen.
-                        </div>
-                    `;
-                } else {
-                    pegelContent.innerHTML = html;
-                    lastUpdateTime = new Date();
-                    updateLastUpdateTime();
-                }
+                pegelContent.innerHTML = html;
+                lastUpdateTime = new Date();
+                updateLastUpdateTime();
 
             } catch (error) {
                 pegelContent.innerHTML = `
                     <div class="error-message">
-                        ⚠️ Daten konnten nicht geladen werden. Bitte überprüfen Sie die Internetverbindung.
+                        ⚠️ Daten konnten nicht geladen werden (${error.message}). Bitte überprüfen Sie die Internetverbindung.
                     </div>
                 `;
                 console.error('Pegel fetch error:', error);
@@ -749,6 +711,35 @@
                 const pct = data.fuellstand;
                 const zielErreicht = pct >= data.ziel_1_november;
 
+                let facilitiesHtml = '';
+
+                if (data.facilitiesAvailable && data.facilities && data.facilities.length > 0) {
+                    facilitiesHtml = `
+                        <h3 style="font-size: 0.9375rem; font-weight: 600; margin: 1.5rem 0 0.75rem;">Einzelne Speicheranlagen (${data.facilities.length})</h3>
+                        <table><thead><tr><th>Anlage</th><th>Füllstand</th><th>Trend</th></tr></thead><tbody>
+                            ${data.facilities.map(f => {
+                                const fTrend = f.trend > 0 ? '📈' : f.trend < 0 ? '📉' : '➡️';
+                                const fTrendClass = f.trend > 0 ? 'trend-up' : f.trend < 0 ? 'trend-down' : 'trend-stable';
+                                return `
+                                    <tr>
+                                        <td><span class="pegel-name">${f.name}</span></td>
+                                        <td><span class="value-box">${f.fuellstand.toFixed(1).replace('.', ',')} %</span></td>
+                                        <td><span class="trend ${fTrendClass}">${fTrend}</span></td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody></table>
+                    `;
+                } else if (data.facilitiesAvailable && data.facilitiesError) {
+                    facilitiesHtml = `<div class="error-message" style="margin-top: 1.25rem;">⚠️ Einzelanlagen: ${data.facilitiesError}</div>`;
+                } else if (!data.facilitiesAvailable) {
+                    facilitiesHtml = `
+                        <div class="target-note" style="margin-top: 1.25rem;">
+                            ℹ️ Einzelanlagen-Ansicht ist eingerichtet, aber noch kein AGSI+-Key in Vercel hinterlegt.
+                        </div>
+                    `;
+                }
+
                 el.innerHTML = `
                     <div class="gas-stat-grid">
                         <div class="gas-stat">
@@ -759,6 +750,14 @@
                             <div class="gas-stat-label">Ziel 1. November</div>
                             <div class="gas-stat-value">${data.ziel_1_november} %</div>
                         </div>
+                        <div class="gas-stat">
+                            <div class="gas-stat-label">Minimum 3J.</div>
+                            <div class="gas-stat-value">${data.minimum != null ? data.minimum.toFixed(1).replace('.', ',') + ' %' : '—'}</div>
+                        </div>
+                        <div class="gas-stat">
+                            <div class="gas-stat-label">Maximum 3J.</div>
+                            <div class="gas-stat-value">${data.maximum != null ? data.maximum.toFixed(1).replace('.', ',') + ' %' : '—'}</div>
+                        </div>
                     </div>
                     <div class="gas-progress-track">
                         <div class="gas-progress-fill" style="width: ${Math.min(pct, 100)}%; background: ${zielErreicht ? 'var(--success)' : 'var(--primary)'};"></div>
@@ -767,7 +766,8 @@
                         ${zielErreicht ? '✅ Ziel bereits erreicht' : `Noch ${(data.ziel_1_november - pct).toFixed(1).replace('.', ',')} Prozentpunkte bis zum Ziel`}
                         · Quelle: ${data.quelle}
                     </p>
-                    <div class="fallback-note">Ausführliches Dashboard: <a href="${GAS_FALLBACK_URL}" target="_blank">Speicherwache öffnen ↗</a></div>
+                    ${facilitiesHtml}
+                    <div class="fallback-note" style="margin-top: 1.25rem;">Ausführliches Dashboard: <a href="${GAS_FALLBACK_URL}" target="_blank">Speicherwache öffnen ↗</a></div>
                 `;
                 gasLastUpdate = new Date();
 
