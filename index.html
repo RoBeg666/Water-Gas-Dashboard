@@ -601,14 +601,23 @@
                     throw new Error('keine Stationen geliefert', { cause: data.debug });
                 }
 
-                let html = '<table><thead><tr><th>Gewässer</th><th>Pegel</th><th>Stand (cm)</th><th>Trend</th></tr></thead><tbody>';
+                let html = '<table><thead><tr><th>Gewässer</th><th>Pegel</th><th>Stand (cm)</th><th>Trend</th><th>Abw. z. Mittel</th><th>über/unter GlW</th></tr></thead><tbody>';
 
                 data.pegel.forEach(station => {
                     const water = station.water;
                     const levelStr = station.level.toFixed(0);
                     const trend = station.trend;
-                    const trendText = trend > 0 ? '📈 steigt' : trend < 0 ? '📉 sinkt' : '➡️ stabil';
+                    const trendText = trend > 0 ? '📈' : trend < 0 ? '📉' : '➡️';
                     const trendClass = trend > 0 ? 'trend-up' : trend < 0 ? 'trend-down' : 'trend-stable';
+
+                    const abwMittel = station.abwMittel != null
+                        ? `${station.abwMittel > 0 ? '+' : ''}${station.abwMittel.toFixed(0)} cm`
+                        : '—';
+
+                    const ueberGlW = station.ueberGlW != null
+                        ? `${station.ueberGlW > 0 ? '+' : ''}${station.ueberGlW.toFixed(0)} cm`
+                        : '—';
+                    const glwClass = station.ueberGlW == null ? '' : station.ueberGlW >= 0 ? 'trend-up' : 'trend-down';
 
                     html += `
                         <tr>
@@ -616,11 +625,14 @@
                             <td><span class="pegel-name">${station.name}</span></td>
                             <td><span class="value-box">${levelStr}</span></td>
                             <td><span class="trend ${trendClass}">${trendText}</span></td>
+                            <td>${abwMittel}</td>
+                            <td>${station.ueberGlW != null ? `<span class="trend ${glwClass}">${ueberGlW}</span>` : '—'}</td>
                         </tr>
                     `;
                 });
 
                 html += '</tbody></table>';
+                html += '<p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.75rem;">Abw. z. Mittel = Abweichung vom Mittelwasser (MW) · über/unter GlW = Abstand zum Gleichwertigen Wasserstand, Referenz für die Fahrrinnentiefe (nicht bei jedem Pegel verfügbar)</p>';
 
                 if (data.failedWaters && data.failedWaters.length > 0) {
                     html = `<div class="error-message">⚠️ Keine Daten für: ${data.failedWaters.join(', ')}</div>` + html;
