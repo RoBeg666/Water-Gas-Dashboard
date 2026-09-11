@@ -576,6 +576,7 @@
         // Läuft jetzt über die Vermittler-Funktion /api/pegel (server-seitig),
         // da direkter Browser-Zugriff auf pegelonline.wsv.de an CORS scheiterte -
         // konsistent mit dem Ansatz für Gas- und Wetter-Daten.
+        const PEGEL_FALLBACK_URL = 'https://claude.ai/code/artifact/e9e143a8-05fe-450f-8b1e-9f53873d4c23';
         let currentTab = 'pegel';
         let lastUpdateTime = null;
 
@@ -593,11 +594,11 @@
                 const data = await response.json();
 
                 if (!response.ok || data.error) {
-                    throw new Error(data.message || 'Abruf fehlgeschlagen');
+                    throw new Error(data.message || 'Abruf fehlgeschlagen', { cause: data.debug });
                 }
 
                 if (!data.pegel || data.pegel.length === 0) {
-                    throw new Error('keine Stationen geliefert');
+                    throw new Error('keine Stationen geliefert', { cause: data.debug });
                 }
 
                 let html = '<table><thead><tr><th>Gewässer</th><th>Pegel</th><th>Stand (cm)</th><th>Trend</th></tr></thead><tbody>';
@@ -625,15 +626,20 @@
                     html = `<div class="error-message">⚠️ Keine Daten für: ${data.failedWaters.join(', ')}</div>` + html;
                 }
 
+                html += `<div class="fallback-note" style="margin-top: 1.25rem;">Ausführliches Dashboard: <a href="${PEGEL_FALLBACK_URL}" target="_blank">Pegelwache öffnen ↗</a></div>`;
+
                 pegelContent.innerHTML = html;
                 lastUpdateTime = new Date();
                 updateLastUpdateTime();
 
             } catch (error) {
+                const debugInfo = error.cause ? `<pre class="report-text" style="font-size:0.7rem; margin-top:0.75rem;">${JSON.stringify(error.cause, null, 2).replace(/</g, '&lt;')}</pre>` : '';
                 pegelContent.innerHTML = `
                     <div class="error-message">
                         ⚠️ Daten konnten nicht geladen werden (${error.message}). Bitte überprüfen Sie die Internetverbindung.
                     </div>
+                    ${debugInfo}
+                    <div class="fallback-note">Ausweichen auf die <a href="${PEGEL_FALLBACK_URL}" target="_blank">bestehende Pegelwache ↗</a></div>
                 `;
                 console.error('Pegel fetch error:', error);
             } finally {
