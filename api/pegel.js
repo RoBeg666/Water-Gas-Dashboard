@@ -1,25 +1,54 @@
 // Vermittler-Funktion: läuft auf Vercel-Servern, nicht im Browser.
-// Holt live alle Stationen der wichtigsten Flüsse von PEGELONLINE ab.
-// Direkter Browser-Zugriff auf pegelonline.wsv.de scheiterte an CORS -
-// server-zu-server-Aufrufe sind davon nicht betroffen.
+// Holt eine kuratierte Liste bekannter Leitpegel (statt automatischer
+// Streuung über den Flusslauf) inklusive kennzeichnender Wasserstände
+// (Mittelwasser MW, Gleichwertiger Wasserstand GlW), um Abweichung vom
+// Mittel und Abstand zum GlW (Fahrrinnentiefe-Referenz) anzuzeigen.
 //
-// Wichtig: der aktuelle Messwert steckt bei PEGELONLINE verschachtelt in
-// einer "timeseries" (meist shortname "W" = Wasserstand). Ohne
-// includeTimeseries=true bleibt currentMeasurement leer, auch wenn
-// includeCurrentMeasurement=true gesetzt ist.
+// Direkter Browser-Zugriff auf pegelonline.wsv.de scheiterte an CORS -
+// deshalb server-seitig. Der Messwert steckt verschachtelt in einer
+// "timeseries" (shortname "W" = Wasserstand); ohne includeTimeseries=true
+// bleibt er leer, auch mit includeCurrentMeasurement=true gesetzt.
 
-const WATERS = ['RHEIN', 'DONAU', 'ELBE', 'MAIN', 'WESER'];
-const STATIONS_PER_WATER = 4;
+const WATERS = ['RHEIN', 'DONAU', 'ELBE', 'MAIN', 'MOSEL'];
 
-function extractLevel(station) {
+// Kuratierte, bekannte Leitpegel je Gewässer (Namen wie bei WSV/PEGELONLINE
+// üblich, Groß-/Kleinschreibung wird beim Abgleich ignoriert).
+const LEITPEGEL = {
+  RHEIN: ['KAUB', 'KÖLN', 'DÜSSELDORF', 'DUISBURG-RUHRORT', 'WESEL', 'EMMERICH', 'KOBLENZ', 'MAINZ', 'MANNHEIM', 'WORMS', 'MAXAU'],
+  DONAU: ['PASSAU DONAU', 'REGENSBURG EISERNE BRÜCKE', 'KELHEIM DONAU', 'INGOLSTADT LUITPOLDSTRASSE', 'DEGGENDORF', 'VILSHOFEN'],
+  ELBE: ['DRESDEN', 'TORGAU', 'WITTENBERGE', 'NEU DARCHAU', 'SCHÖNA'],
+  MAIN: ['WÜRZBURG', 'FRANKFURT OSTHAFEN'],
+  MOSEL: ['COCHEM', 'KOBLENZ OP']
+};
+
+function norm(s) {
+  return (s || '').trim().toUpperCase();
+}
+
+function extractMeasurementAndMarks(station) {
   if (!Array.isArray(station.timeseries)) return null;
 
   const ts = station.timeseries.find(t => t.shortname === 'W') || station.timeseries[0];
   if (!ts || !ts.currentMeasurement || typeof ts.currentMeasurement.value !== 'number') return null;
 
+  const level = ts.currentMeasurement.value;
+  const trend = ts.currentMeasurement.trend ?? 0;
+
+  let mw = null;
+  let glw = null;
+
+  if (Array.isArray(ts.characteristicValues)) {
+    const mwEntry = ts.characteristicValues.find(c => c.shortname === 'MW');
+    const glwEntry = ts.characteristicValues.find(c => c.shortname === 'GlW');
+    if (mwEntry) mw = mwEntry.value;
+    if (glwEntry) glw = glwEntry.value;
+  }
+
   return {
-    level: ts.currentMeasurement.value,
-    trend: ts.currentMeasurement.trend ?? 0
+    level,
+    trend,
+    abwMittel: mw != null ? level - mw : null,
+    ueberGlW: glw != null ? level - glw : null
   };
 }
 
@@ -29,7 +58,7 @@ export default async function handler(req, res) {
   try {
     const results = await Promise.allSettled(
       WATERS.map(water =>
-        fetch(`https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=${water}&includeTimeseries=true&includeCurrentMeasurement=true`, {
+        fetch(`https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=${water}&includeTimeseries=true&includeCurrentMeasurement=true&includeCharacteristicValues=true`, {
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; WasserGasDashboard/1.0)' }
         })
           .then(r => {
@@ -42,9 +71,11 @@ export default async function handler(req, res) {
 
     const pegel = [];
     const failedWaters = [];
+    const notFound = [];
 
     results.forEach((result, idx) => {
       const water = WATERS[idx];
+      const targets = (LEITPEGEL[water] || []).map(norm);
 
       if (result.status !== 'fulfilled') {
         failedWaters.push(water);
@@ -52,32 +83,39 @@ export default async function handler(req, res) {
         return;
       }
 
-      const rawCount = (result.value.stations || []).length;
+      const stations = result.value.stations || [];
+      let foundCount = 0;
 
-      const stations = (result.value.stations || [])
-        .map(s => {
-          const measurement = extractLevel(s);
-          return measurement ? { ...s, level: measurement.level, trend: measurement.trend } : null;
-        })
-        .filter(Boolean)
-        .sort((a, b) => (b.km ?? 0) - (a.km ?? 0));
+      targets.forEach(target => {
+        const station = stations.find(s => norm(s.shortname) === target || norm(s.longname) === target);
 
-      debug.push({ water, rawCount, withMeasurement: stations.length });
+        if (!station) {
+          notFound.push(`${water}:${target}`);
+          return;
+        }
 
-      if (stations.length === 0) {
-        failedWaters.push(water);
-        return;
-      }
+        const measurement = extractMeasurementAndMarks(station);
 
-      const step = Math.max(1, Math.floor(stations.length / STATIONS_PER_WATER));
-      for (let i = 0; i < stations.length && pegel.filter(p => p.water === water).length < STATIONS_PER_WATER; i += step) {
-        const s = stations[i];
+        if (!measurement) {
+          notFound.push(`${water}:${target} (kein Messwert)`);
+          return;
+        }
+
+        foundCount++;
         pegel.push({
           water,
-          name: s.longname || s.shortname,
-          level: s.level,
-          trend: s.trend
+          name: station.longname || station.shortname,
+          level: measurement.level,
+          trend: measurement.trend,
+          abwMittel: measurement.abwMittel,
+          ueberGlW: measurement.ueberGlW
         });
+      });
+
+      debug.push({ water, targets: targets.length, found: foundCount });
+
+      if (foundCount === 0) {
+        failedWaters.push(water);
       }
     });
 
@@ -85,6 +123,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       pegel,
       failedWaters,
+      notFound,
       debug,
       abgerufenAm: new Date().toISOString()
     });
