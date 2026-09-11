@@ -305,6 +305,153 @@
             color: var(--text-secondary);
         }
 
+        .link-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+        }
+
+        .link-tile {
+            display: flex;
+            flex-direction: column;
+            gap: 0.375rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: border-color 0.2s, transform 0.1s;
+        }
+
+        .link-tile:hover {
+            border-color: var(--primary);
+        }
+
+        .link-tile:active {
+            transform: scale(0.98);
+        }
+
+        .link-tile-icon {
+            font-size: 1.5rem;
+        }
+
+        .link-tile-title {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .link-tile-desc {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .target-note {
+            margin-top: 1.25rem;
+            padding: 0.875rem 1.25rem;
+            background: var(--background);
+            border-radius: var(--radius);
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .target-note strong {
+            color: var(--text-primary);
+        }
+
+        .gas-stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .gas-stat {
+            background: var(--background);
+            border-radius: var(--radius);
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .gas-stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .gas-stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .gas-progress-track {
+            width: 100%;
+            height: 10px;
+            background: var(--border);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .gas-progress-fill {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 5px;
+            transition: width 0.4s ease;
+        }
+
+        .subtabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+        }
+
+        .subtab {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 0.5rem 1rem;
+            border-radius: 16px;
+            cursor: pointer;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .subtab:hover {
+            color: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .subtab.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .report-text {
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8125rem;
+            line-height: 1.5;
+            background: var(--background);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .fallback-note {
+            margin-top: 0.75rem;
+            font-size: 0.8125rem;
+        }
+
+        .fallback-note a {
+            color: var(--primary);
+        }
+
         @media (max-width: 768px) {
             header {
                 padding: 1rem;
@@ -372,9 +519,9 @@
         </header>
 
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('pegel')">🌊 Pegel</button>
-            <button class="tab" onclick="switchTab('gas')">🛢️ Gasspeicher</button>
-            <button class="tab" onclick="switchTab('wetter')">☁️ Wetter</button>
+            <button class="tab active" onclick="switchTab('pegel', this)">🌊 Pegel</button>
+            <button class="tab" onclick="switchTab('gas', this)">🛢️ Gasspeicher</button>
+            <button class="tab" onclick="switchTab('wetter', this)">☁️ Wetter</button>
         </div>
 
         <div class="content">
@@ -385,18 +532,17 @@
 
             <!-- GAS TAB -->
             <div id="gas" class="tab-pane">
-                <div class="empty-state">
-                    <p>🛢️ Speicherwache – kommt bald</p>
-                    <p style="font-size: 0.875rem; margin-top: 0.5rem;">Füllstände der deutschen Gasspeicher</p>
-                </div>
+                <div id="gasContent"></div>
             </div>
 
             <!-- WETTER TAB -->
             <div id="wetter" class="tab-pane">
-                <div class="empty-state">
-                    <p>☁️ Synoptik-Berichte – kommt bald</p>
-                    <p style="font-size: 0.875rem; margin-top: 0.5rem;">DWD-Vorhersagen und Links</p>
+                <div class="subtabs">
+                    <button class="subtab active" onclick="switchWetterReport('morgen', this)">🌅 Morgen</button>
+                    <button class="subtab" onclick="switchWetterReport('abend', this)">🌆 Abend</button>
+                    <button class="subtab" onclick="switchWetterReport('mittelfrist', this)">📅 Mittelfrist</button>
                 </div>
+                <div id="wetterContent"></div>
             </div>
         </div>
 
@@ -427,29 +573,11 @@
         }
 
         // Pegel-Daten (21 Leitpegel)
-        const PEGEL_IDS = [
-            { id: 2880400, name: 'Konstanz-Rhein' },
-            { id: 2880500, name: 'Rheinfelden' },
-            { id: 2880600, name: 'Straßburg' },
-            { id: 2880700, name: 'Mannheim' },
-            { id: 2881000, name: 'Kaub' },
-            { id: 2881200, name: 'Köln' },
-            { id: 2881400, name: 'Emmerich' },
-            { id: 2900300, name: 'Diemelstadt-Weser' },
-            { id: 3020100, name: 'Hann. Münden-Werra' },
-            { id: 3041000, name: 'Torgau-Elbe' },
-            { id: 3058500, name: 'Neu Darchau-Elbe' },
-            { id: 3100000, name: 'Wolfenbüttel-Oker' },
-            { id: 3200100, name: 'Passau-Donau' },
-            { id: 3228000, name: 'Vilshofen-Donau' },
-            { id: 3278000, name: 'Regensburg-Donau' },
-            { id: 3323000, name: 'Ingolstadt-Donau' },
-            { id: 3356500, name: 'Donauwörth-Donau' },
-            { id: 3362000, name: 'Günzburg-Donau' },
-            { id: 3380000, name: 'Landshutvr-Große Isar' },
-            { id: 3368000, name: 'Obernzell-Donau' },
-            { id: 3400300, name: 'Krün-Isar' }
-        ];
+        // Statt fest einprogrammierter Stations-IDs (die sich als falsch herausstellten)
+        // fragen wir live pro Gewässer alle Stationen ab und zeigen, was Daten liefert.
+        // Das kann nie an falschen IDs scheitern, weil nichts geraten wird.
+        const WATERS = ['RHEIN', 'DONAU', 'ELBE', 'MAIN', 'WESER'];
+        const STATIONS_PER_WATER = 4;
 
         let currentTab = 'pegel';
         let lastUpdateTime = null;
@@ -461,41 +589,83 @@
 
             refreshBtn.classList.add('loading');
             refreshIcon.classList.add('spinning');
+            pegelContent.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
 
             try {
-                const ids = PEGEL_IDS.map(p => p.id).join(',');
-                const response = await fetch(`https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?ids=${ids}`);
-                
-                if (!response.ok) throw new Error('Fetch failed');
-                
-                const data = await response.json();
-                lastUpdateTime = new Date();
-                updateLastUpdateTime();
+                const results = await Promise.allSettled(
+                    WATERS.map(water =>
+                        fetch(`https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?waters=${water}&includeCurrentMeasurement=true`)
+                            .then(res => {
+                                if (!res.ok) throw new Error(`${water}: ${res.status}`);
+                                return res.json();
+                            })
+                            .then(stations => ({ water, stations }))
+                    )
+                );
 
-                let html = '<table><thead><tr><th>Pegel</th><th>Stand (cm)</th><th>Trend</th><th>Vorhersage</th></tr></thead><tbody>';
+                let html = '<table><thead><tr><th>Gewässer</th><th>Pegel</th><th>Stand (cm)</th><th>Trend</th></tr></thead><tbody>';
+                let anyData = false;
+                const failedWaters = [];
 
-                PEGEL_IDS.forEach(pegel => {
-                    const station = data.find(s => s.uuid === pegel.id.toString());
-                    
-                    if (station) {
-                        const levelStr = station.currentMeasurement?.value?.toFixed(0) ?? '-';
-                        const trend = station.currentMeasurement?.trend ?? 0;
+                results.forEach((result, idx) => {
+                    const water = WATERS[idx];
+
+                    if (result.status !== 'fulfilled') {
+                        failedWaters.push(water);
+                        return;
+                    }
+
+                    const stations = (result.value.stations || [])
+                        .filter(s => s.currentMeasurement && typeof s.currentMeasurement.value === 'number')
+                        .sort((a, b) => (b.km ?? 0) - (a.km ?? 0));
+
+                    if (stations.length === 0) {
+                        failedWaters.push(water);
+                        return;
+                    }
+
+                    // Gleichmäßig über den Flusslauf verteilte Stichprobe statt nur der ersten N
+                    const step = Math.max(1, Math.floor(stations.length / STATIONS_PER_WATER));
+                    const picked = [];
+                    for (let i = 0; i < stations.length && picked.length < STATIONS_PER_WATER; i += step) {
+                        picked.push(stations[i]);
+                    }
+
+                    picked.forEach(station => {
+                        anyData = true;
+                        const levelStr = station.currentMeasurement.value.toFixed(0);
+                        const trend = station.currentMeasurement.trend ?? 0;
                         const trendText = trend > 0 ? '📈 steigt' : trend < 0 ? '📉 sinkt' : '➡️ stabil';
                         const trendClass = trend > 0 ? 'trend-up' : trend < 0 ? 'trend-down' : 'trend-stable';
 
                         html += `
                             <tr>
-                                <td><span class="pegel-name">${pegel.name}</span></td>
+                                <td>${water.charAt(0) + water.slice(1).toLowerCase()}</td>
+                                <td><span class="pegel-name">${station.longname || station.shortname}</span></td>
                                 <td><span class="value-box">${levelStr}</span></td>
                                 <td><span class="trend ${trendClass}">${trendText}</span></td>
-                                <td>—</td>
                             </tr>
                         `;
-                    }
+                    });
                 });
 
                 html += '</tbody></table>';
-                pegelContent.innerHTML = html;
+
+                if (failedWaters.length > 0) {
+                    html = `<div class="error-message">⚠️ Keine Daten für: ${failedWaters.join(', ')}</div>` + html;
+                }
+
+                if (!anyData) {
+                    pegelContent.innerHTML = `
+                        <div class="error-message">
+                            ⚠️ Aktuell konnten keine Pegel-Daten geladen werden. Bitte Internetverbindung prüfen und erneut versuchen.
+                        </div>
+                    `;
+                } else {
+                    pegelContent.innerHTML = html;
+                    lastUpdateTime = new Date();
+                    updateLastUpdateTime();
+                }
 
             } catch (error) {
                 pegelContent.innerHTML = `
@@ -524,7 +694,7 @@
             }
         }
 
-        function switchTab(tabName) {
+        function switchTab(tabName, clickedTab) {
             // Hide all panes
             document.querySelectorAll('.tab-pane').forEach(pane => {
                 pane.classList.remove('active');
@@ -535,19 +705,140 @@
 
             // Show selected pane
             document.getElementById(tabName).classList.add('active');
-            event.target.classList.add('active');
+            clickedTab.classList.add('active');
             currentTab = tabName;
 
             // Load data if needed
             if (tabName === 'pegel' && !lastUpdateTime) {
                 fetchPegelData();
             }
+            if (tabName === 'gas' && !gasLastUpdate) {
+                fetchGasData();
+            }
+            if (tabName === 'wetter' && !wetterLastUpdate[currentWetterReport]) {
+                fetchWetterReport(currentWetterReport);
+            }
         }
 
         function refreshCurrentTab() {
             if (currentTab === 'pegel') {
                 fetchPegelData();
+            } else if (currentTab === 'gas') {
+                fetchGasData();
+            } else if (currentTab === 'wetter') {
+                fetchWetterReport(currentWetterReport);
             }
+        }
+
+        // ---- Gasspeicher (Bundesnetzagentur, via Vermittler-Funktion /api/gas) ----
+        const GAS_FALLBACK_URL = 'https://claude.ai/code/artifact/32229e5d-3cc7-44e8-b2ed-297fa1e071d3';
+        let gasLastUpdate = null;
+
+        async function fetchGasData() {
+            const el = document.getElementById('gasContent');
+            el.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
+
+            try {
+                const response = await fetch('/api/gas');
+                const data = await response.json();
+
+                if (!response.ok || data.error) {
+                    throw new Error(data.message || 'Abruf fehlgeschlagen');
+                }
+
+                const pct = data.fuellstand;
+                const zielErreicht = pct >= data.ziel_1_november;
+
+                el.innerHTML = `
+                    <div class="gas-stat-grid">
+                        <div class="gas-stat">
+                            <div class="gas-stat-label">Füllstand (${data.datum})</div>
+                            <div class="gas-stat-value">${pct.toFixed(1).replace('.', ',')} %</div>
+                        </div>
+                        <div class="gas-stat">
+                            <div class="gas-stat-label">Ziel 1. November</div>
+                            <div class="gas-stat-value">${data.ziel_1_november} %</div>
+                        </div>
+                    </div>
+                    <div class="gas-progress-track">
+                        <div class="gas-progress-fill" style="width: ${Math.min(pct, 100)}%; background: ${zielErreicht ? 'var(--success)' : 'var(--primary)'};"></div>
+                    </div>
+                    <p style="font-size: 0.8125rem; color: var(--text-secondary); margin: 0 0 1rem;">
+                        ${zielErreicht ? '✅ Ziel bereits erreicht' : `Noch ${(data.ziel_1_november - pct).toFixed(1).replace('.', ',')} Prozentpunkte bis zum Ziel`}
+                        · Quelle: ${data.quelle}
+                    </p>
+                    <div class="fallback-note">Ausführliches Dashboard: <a href="${GAS_FALLBACK_URL}" target="_blank">Speicherwache öffnen ↗</a></div>
+                `;
+                gasLastUpdate = new Date();
+
+            } catch (error) {
+                el.innerHTML = `
+                    <div class="error-message">⚠️ Live-Daten konnten nicht geladen werden (${error.message}).</div>
+                    <div class="fallback-note">Ausweichen auf das <a href="${GAS_FALLBACK_URL}" target="_blank">bestehende Speicherwache-Dashboard ↗</a></div>
+                `;
+                console.error('Gas fetch error:', error);
+            }
+        }
+
+        // ---- DWD-Synoptik (via Vermittler-Funktion /api/dwd) ----
+        const WETTER_FALLBACK_URLS = {
+            morgen: 'https://claude.ai/code/artifact/c22596f7-af0d-4bd6-85dc-13b347decc6b',
+            abend: 'https://claude.ai/code/artifact/6b211a80-9500-4842-a4d7-2faea362cc88',
+            mittelfrist: 'https://claude.ai/code/artifact/8080d0b3-a68a-4224-8596-4a1ab691c14c'
+        };
+        const WETTER_LABELS = {
+            morgen: 'Kurzfrist Morgen (08 UTC)',
+            abend: 'Kurzfrist Abend (18 UTC)',
+            mittelfrist: 'Mittelfrist (7 Tage)'
+        };
+        let currentWetterReport = 'morgen';
+        let wetterLastUpdate = { morgen: null, abend: null, mittelfrist: null };
+
+        function switchWetterReport(report, clickedSubtab) {
+            document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+            clickedSubtab.classList.add('active');
+            currentWetterReport = report;
+
+            if (!wetterLastUpdate[report]) {
+                fetchWetterReport(report);
+            } else {
+                renderWetterReport(wetterLastUpdate[report].data, report);
+            }
+        }
+
+        async function fetchWetterReport(report) {
+            const el = document.getElementById('wetterContent');
+            el.innerHTML = '<div class="loading-spinner"><div class="spinner"></div></div>';
+
+            try {
+                const response = await fetch(`/api/dwd?report=${report}`);
+                const data = await response.json();
+
+                if (!response.ok || data.error) {
+                    throw new Error(data.message || 'Abruf fehlgeschlagen');
+                }
+
+                wetterLastUpdate[report] = { data, time: new Date() };
+                renderWetterReport(data, report);
+
+            } catch (error) {
+                el.innerHTML = `
+                    <div class="error-message">⚠️ Live-Daten konnten nicht geladen werden (${error.message}).</div>
+                    <div class="fallback-note">Ausweichen auf den <a href="${WETTER_FALLBACK_URLS[report]}" target="_blank">bestehenden DWD-Report ↗</a></div>
+                `;
+                console.error('DWD fetch error:', error);
+            }
+        }
+
+        function renderWetterReport(data, report) {
+            const el = document.getElementById('wetterContent');
+            el.innerHTML = `
+                <p style="font-size: 0.8125rem; color: var(--text-secondary); margin: 0 0 0.75rem;">
+                    ${WETTER_LABELS[report]} · Quelle: ${data.quelle}
+                </p>
+                <div class="report-text">${data.text.replace(/</g, '&lt;')}</div>
+                <div class="fallback-note">Original-Ansicht: <a href="${WETTER_FALLBACK_URLS[report]}" target="_blank">DWD-Report als Artifact öffnen ↗</a></div>
+            `;
         }
 
         // Load pegel data on page load
