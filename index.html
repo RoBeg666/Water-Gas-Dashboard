@@ -431,6 +431,15 @@
             border-color: var(--primary);
         }
 
+        .embed-frame {
+            width: 100%;
+            height: 75vh;
+            min-height: 500px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: white;
+        }
+
         .report-text {
             white-space: pre-wrap;
             font-family: 'Courier New', monospace;
@@ -522,6 +531,7 @@
             <button class="tab active" onclick="switchTab('pegel', this)">🌊 Pegel</button>
             <button class="tab" onclick="switchTab('gas', this)">🛢️ Gasspeicher</button>
             <button class="tab" onclick="switchTab('wetter', this)">☁️ Wetter</button>
+            <button class="tab" onclick="switchTab('atlantik', this)">🌡️ Atlantik</button>
         </div>
 
         <div class="content">
@@ -543,6 +553,14 @@
                     <button class="subtab" onclick="switchWetterReport('mittelfrist', this)">📅 Mittelfrist</button>
                 </div>
                 <div id="wetterContent"></div>
+            </div>
+
+            <!-- ATLANTIK TAB -->
+            <div id="atlantik" class="tab-pane">
+                <iframe id="atlantikFrame" class="embed-frame" src="https://mco.umaine.edu/climate/gom_sst/" title="Maine Climate Office - Nordatlantik SST" loading="lazy"></iframe>
+                <div class="fallback-note" style="margin-top: 0.75rem;">
+                    Lädt die Seite hier nicht (Einbettungsschutz möglich)? <a href="https://claude.ai/code/artifact/a9542a1e-bed4-42ad-8331-2304fdcdd694" target="_blank">Atlantikwache-Dashboard öffnen ↗</a>
+                </div>
             </div>
         </div>
 
@@ -707,6 +725,9 @@
                 fetchGasData();
             } else if (currentTab === 'wetter') {
                 fetchWetterReport(currentWetterReport);
+            } else if (currentTab === 'atlantik') {
+                const frame = document.getElementById('atlantikFrame');
+                if (frame) frame.src = frame.src;
             }
         }
 
