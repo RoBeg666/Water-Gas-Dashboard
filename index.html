@@ -532,6 +532,7 @@
             <button class="tab" onclick="switchTab('gas', this)">🛢️ Gasspeicher</button>
             <button class="tab" onclick="switchTab('wetter', this)">☁️ Wetter</button>
             <button class="tab" onclick="switchTab('atlantik', this)">🌡️ Atlantik</button>
+            <button class="tab" onclick="switchTab('metar', this)">✈️ METAR EDMO</button>
         </div>
 
         <div class="content">
@@ -560,6 +561,14 @@
                 <iframe id="atlantikFrame" class="embed-frame" src="https://mco.umaine.edu/climate/gom_sst/" title="Maine Climate Office - Nordatlantik SST" loading="lazy"></iframe>
                 <div class="fallback-note" style="margin-top: 0.75rem;">
                     Lädt die Seite hier nicht (Einbettungsschutz möglich)? <a href="https://claude.ai/code/artifact/a9542a1e-bed4-42ad-8331-2304fdcdd694" target="_blank">Atlantikwache-Dashboard öffnen ↗</a>
+                </div>
+            </div>
+
+            <!-- METAR TAB -->
+            <div id="metar" class="tab-pane">
+                <iframe id="metarFrame" class="embed-frame" src="https://de.allmetsat.com/metar-taf/deutschland.php?icao=EDMO" title="METAR/TAF EDMO" loading="lazy"></iframe>
+                <div class="fallback-note" style="margin-top: 0.75rem;">
+                    Lädt die Seite hier nicht (Einbettungsschutz möglich)? <a href="https://de.allmetsat.com/metar-taf/deutschland.php?icao=EDMO" target="_blank">allmetsat.com in neuem Tab öffnen ↗</a>
                 </div>
             </div>
         </div>
@@ -727,6 +736,9 @@
                 fetchWetterReport(currentWetterReport);
             } else if (currentTab === 'atlantik') {
                 const frame = document.getElementById('atlantikFrame');
+                if (frame) frame.src = frame.src;
+            } else if (currentTab === 'metar') {
+                const frame = document.getElementById('metarFrame');
                 if (frame) frame.src = frame.src;
             }
         }
